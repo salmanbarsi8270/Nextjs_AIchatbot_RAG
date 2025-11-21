@@ -1,77 +1,62 @@
-import { UIMessage, convertToModelMessages, streamText, tool, UIDataTypes, InferUITools, stepCountIs,} from "ai";
+import {  UIMessage, convertToModelMessages, streamText, tool, UIDataTypes, InferUITools, stepCountIs } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import { z } from "zod";
+import { z } from "zod"
 import { searchDocuments } from "@/lib/search";
 
-/* ------------------ TOOLS ------------------ */
 const tools = {
-  searchKnowledgeBase: tool({
+  searchKnowledgeBase : tool({
     description: "Search the knowledge base for relevant information",
     inputSchema: z.object({
-      query: z.string().describe("Search query to find relevant documents"),
+      query: z.string().describe("The search query to find relevant documents"),
     }),
-    execute: async ({ query }: any) => {
+    execute: async({query}:any) => {
       try {
         const results = await searchDocuments(query, 3, 0.5);
 
-        if (results.length === 0) {
-          return "No relevant information found.";
+        if(results.length === 0){
+          return "No relevant information found in the knowledge base.";
         }
 
-        const formatted = results
+        // Format results for the AI
+        const formattedResults = results
           .map((r, i) => `[${i + 1}] ${r.content}`)
           .join("\n\n");
 
-        return formatted;
+        return formattedResults;
+        
       } catch (error) {
-        console.error("Search error:", error);
+        console.error("Search error", error)
         return "Error searching the knowledge base.";
       }
-    },
-  }),
-};
+    }
+  })
+}
 
 export type ChatTools = InferUITools<typeof tools>;
 export type ChatMessage = UIMessage<never, UIDataTypes, ChatTools>;
 
-/* ------------------ MODEL PROVIDER ------------------ */
 const openrouter = createOpenRouter({
-  apiKey: process.env.OPENROUTER_API_KEY!,
+  apiKey: process.env.OPENROUTER_API_KEY!,  
 });
 
-/* ------------------ ROUTE HANDLER ------------------ */
 export async function POST(request: Request) {
   try {
     const { messages }: { messages: ChatMessage[] } = await request.json();
-    console.log(messages)
 
     const result = streamText({
       model: openrouter.chat("nvidia/nemotron-nano-12b-v2-vl:free"),
       messages: convertToModelMessages(messages),
       tools,
-      system: `
-              You are an AI assistant with:
-              - access to a knowledge base,
-              - ability to search using tools,
-              - ability to analyze image/PDF attachments sent by the user.
-
-              RULES:
-              - Whenever the user asks, make use of the attachments they uploaded.
-              - The attachments are sent as "experimental_attachments" with URLs. Treat them as real files.
-              - For questions related to text, facts, summaries, refer to the knowledge base using the search tool.
-              - Answer clearly and concisely.
-              - If attachments are present, ALWAYS use them.
-              - If the question may relate to uploaded documents, ALWAYS search the knowledge base before answering.
-              `,
+      system: `You are a helpful assistant with access to a knowledge base. 
+          When users ask questions, search the knowledge base for relevant information.
+          Always search before answering if the question might relate to uploaded documents.
+          Base your answers on the search results when available. Give concise answers that correctly answer what the user is asking for. Do not flood them with all the information from the search results.`,
       stopWhen: stepCountIs(2),
     });
 
     return result.toUIMessageStreamResponse();
   } catch (error) {
     console.error("Error in POST /chat:", error);
-    return Response.json(
-      { text: "Error generating response." },
-      { status: 500 }
-    );
+    return Response.json({ text: "Error generating response." }, { status: 500 });
   }
 }

@@ -28,6 +28,7 @@ export async function processpdfFile(formData: FormData) {
     console.log("EMBEDDINGS RESPONSE...:", embeddingResponse);
 
     const embedData = embeddingResponse.data;
+    console.log(embedData, "embedData")
 
     await db.insert(documents).values(
       chunks.map((chunk, index) => ({

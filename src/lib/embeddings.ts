@@ -7,7 +7,7 @@ const openRouter = new OpenRouterCore({
 });
 
 export async function generateEmbeddingsMany(texts: string[]) {
-  const cleaned = texts.map((t) => t.replace(/\n/g, " "));
+  const cleaned = texts.map((text) => text.replaceAll("\n", " "));
   const res = await embeddingsGenerate(openRouter, {
     input: cleaned,
     model: "thenlper/gte-base",

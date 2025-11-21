@@ -4,26 +4,41 @@ import { db } from "./db-config";
 import { documents } from "./db-schema";
 import { generateEmbeddingsMany } from "./embeddings";
 
-/**
- * Search for similar documents using Drizzle ORM with cosineDistance
- */
 export async function searchDocuments(
-  query: string[],
-  limit: number = 5,
-  threshold: number = 0.5
+  query: string,
+  limit = 5,
+  threshold = 0.5
 ) {
-  // Generate embedding for the search query
-  const embedding:any = await generateEmbeddingsMany(query);
+  // Generate embedding for query
+  const embedRes:any = await generateEmbeddingsMany([query]);
 
-  // Calculate similarity using Drizzle's cosineDistance function
-  // This creates a SQL expression for similarity calculation
-  const similarity = sql<number>`1 - (${cosineDistance(
-    documents.embedding,
-    embedding
-  )})`;
+  if (!embedRes) {
+    console.error("Embedding generator returned null");
+    return [];
+  }
 
-  // Use Drizzle's query builder for the search
-  const similarDocuments = await db
+  // Extract correct vector format
+  const vector =
+    embedRes.data?.[0]?.embedding ||
+    embedRes[0]?.embedding ||
+    embedRes[0] ||
+    null;
+
+  if (!vector || !Array.isArray(vector)) {
+    console.error("Invalid embedding:", vector);
+    return [];
+  }
+
+  // ⭐ FIX → Neon requires [1,2,3] not {1,2,3}
+  const pgVector = `[${vector.join(",")}]`;
+
+  // Build similarity SQL
+  const similarity = sql<number>`
+    1 - (${cosineDistance(documents.embedding, pgVector)})
+  `;
+
+  // Query Neon
+  const rows = await db
     .select({
       id: documents.id,
       content: documents.content,
@@ -34,5 +49,5 @@ export async function searchDocuments(
     .orderBy(desc(similarity))
     .limit(limit);
 
-  return similarDocuments;
+  return rows;
 }
