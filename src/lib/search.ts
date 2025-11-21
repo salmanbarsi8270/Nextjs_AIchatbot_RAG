@@ -10,34 +10,22 @@ export async function searchDocuments(
   threshold = 0.5
 ) {
   // Generate embedding for query
-  const embedRes:any = await generateEmbeddingsMany([query]);
+  const embedList = await generateEmbeddingsMany([query]);
 
-  if (!embedRes) {
-    console.error("Embedding generator returned null");
+  if (!embedList || embedList.length === 0) {
+    console.error("No embedding generated");
     return [];
   }
 
-  // Extract correct vector format
-  const vector =
-    embedRes.data?.[0]?.embedding ||
-    embedRes[0]?.embedding ||
-    embedRes[0] ||
-    null;
+  const vector = embedList[0]; // The actual [x,y,z...]
 
-  if (!vector || !Array.isArray(vector)) {
-    console.error("Invalid embedding:", vector);
-    return [];
-  }
-
-  // ⭐ FIX → Neon requires [1,2,3] not {1,2,3}
+  // Neon expects pgvector format: [1,2,3]
   const pgVector = `[${vector.join(",")}]`;
 
-  // Build similarity SQL
   const similarity = sql<number>`
     1 - (${cosineDistance(documents.embedding, pgVector)})
   `;
 
-  // Query Neon
   const rows = await db
     .select({
       id: documents.id,
