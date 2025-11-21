@@ -1,0 +1,4 @@
+- [ ] Fix function names in src/lib/embeddings.ts (genrateEmbeddings -> generateEmbeddings, genrateEmbeddingsMany -> generateEmbeddingsMany)
+- [ ] Refactor src/app/upload/actions.ts to use extractPdfText from pdf-reader.ts, remove broken pdf-parse code, fix imports, update function calls, and ensure proper async handling
+- [ ] Test PDF upload functionality
+- [ ] Verify database insertion
