@@ -1,39 +1,7 @@
-import {  UIMessage, convertToModelMessages, streamText, tool, UIDataTypes, InferUITools, stepCountIs } from "ai";
+// src/app/api/chat/route.ts
+import { streamText } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import { z } from "zod"
 import { searchDocuments } from "@/lib/search";
-
-const tools = {
-  searchKnowledgeBase : tool({
-    description: "Search the knowledge base for relevant information",
-    inputSchema: z.object({
-      query: z.string().describe("The search query to find relevant documents"),
-    }),
-    execute: async({query}:any) => {
-      try {
-        const results = await searchDocuments(query, 3, 0.5);
-
-        if(results.length === 0){
-          return "No relevant information found in the knowledge base.";
-        }
-
-        // Format results for the AI
-        const formattedResults = results
-          .map((r, i) => `[${i + 1}] ${r.content}`)
-          .join("\n\n");
-
-        return formattedResults;
-        
-      } catch (error) {
-        console.error("Search error", error)
-        return "Error searching the knowledge base.";
-      }
-    }
-  })
-}
-
-export type ChatTools = InferUITools<typeof tools>;
-export type ChatMessage = UIMessage<never, UIDataTypes, ChatTools>;
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY!,  
@@ -41,22 +9,120 @@ const openrouter = createOpenRouter({
 
 export async function POST(request: Request) {
   try {
-    const { messages }: { messages: ChatMessage[] } = await request.json();
+    const body = await request.json();
+    console.log("Request body:", JSON.stringify(body));
 
+    const messages = body.messages || [];
+    const model = body.data?.model || body.model || "nvidia/nemotron-nano-12b-v2-vl:free";
+
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return Response.json(
+        { error: "Messages array is required and must not be empty" },
+        { status: 400 }
+      );
+    }
+
+    // Get the last user message for RAG search
+    const lastUserMessage = messages.filter((m: any) => m.role === 'user').pop();
+
+    if (!lastUserMessage || !lastUserMessage.content) {
+      return Response.json(
+        { error: "No user message found" },
+        { status: 400 }
+      );
+    }
+
+    const query = lastUserMessage.content;
+
+    console.log("Extracted Query:", query);
+    console.log("Selected Model:", model);
+
+    // 1) RAG Search
+    const results = await searchDocuments(query, 5, 0.4);
+    
+    const context = results.length > 0 ? results .map((r: any, i: number) => `[Document ${i + 1}] ${r.content}`) .join("\n\n") : "No relevant documents found in the database.";
+
+    console.log("RAG Search Results:", results.length, "documents found");
+
+    // 2) Build system prompt with context
+    const systemPrompt = `You are a helpful AI assistant with access to a document database.
+
+Retrieved Context from Database:
+${context}
+
+Instructions:
+- Use the context above to answer the user's question accurately
+- If the context contains relevant information, cite it naturally in your response
+- If the context doesn't contain relevant information, provide a helpful message that no relevant documents were found
+- Be concise and clear`;
+
+    console.log("System Prompt created");
+
+    // 3) Clean and format messages for the model
+    const cleanedMessages = messages
+      .map((msg: any) => {
+        // Handle user messages
+        if (msg.role === 'user') {
+          return {
+            role: 'user' as const,
+            content: typeof msg.content === 'string' ? msg.content : msg.content || '',
+          };
+        }
+        // Handle assistant messages - extract text from parts if present
+        else if (msg.role === 'assistant') {
+          let textContent = '';
+          
+          if (typeof msg.content === 'string') {
+            textContent = msg.content;
+          } else if (msg.parts && Array.isArray(msg.parts)) {
+            // Extract text from parts array
+            textContent = msg.parts
+              .filter((part: any) => part.type === 'text')
+              .map((part: any) => part.text)
+              .join('\n');
+          } else if (Array.isArray(msg.content)) {
+            textContent = msg.content
+              .filter((part: any) => part.type === 'text')
+              .map((part: any) => part.text || '')
+              .join('\n');
+          }
+          
+          return {
+            role: 'assistant' as const,
+            content: textContent || 'No response',
+          };
+        }
+        
+        return null;
+      })
+      .filter((msg): msg is { role: 'user' | 'assistant'; content: string } => msg !== null);
+
+    // 4) Build final messages array with system prompt
+    const finalMessages = [
+      {
+        role: "system" as const,
+        content: systemPrompt,
+      },
+      ...cleanedMessages,
+    ];
+
+    // 4) Stream AI Response
     const result = streamText({
-      model: openrouter.chat("nvidia/nemotron-nano-12b-v2-vl:free"),
-      messages: convertToModelMessages(messages),
-      tools,
-      system: `You are a helpful assistant with access to a knowledge base. 
-          When users ask questions, search the knowledge base for relevant information.
-          Always search before answering if the question might relate to uploaded documents.
-          Base your answers on the search results when available. Give concise answers that correctly answer what the user is asking for. Do not flood them with all the information from the search results.`,
-      stopWhen: stepCountIs(2),
+      model: openrouter.chat(model),
+      messages: finalMessages,
     });
 
+    // Use toDataStreamResponse for useChat
     return result.toUIMessageStreamResponse();
   } catch (error) {
-    console.error("Error in POST /chat:", error);
-    return Response.json({ text: "Error generating response." }, { status: 500 });
+    console.error("Chat API Error:", error);
+    
+    return Response.json(
+      { 
+        error: "Chat processing failed", 
+        details: error instanceof Error ? error.message : String(error) 
+      },
+      { status: 500 }
+    );
   }
 }
