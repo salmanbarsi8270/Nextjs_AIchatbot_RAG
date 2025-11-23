@@ -1,9 +1,10 @@
+import { Loader } from '@/components/ai-elements/loader';
 import { Bot, Paperclip, Send, StopCircle, X } from 'lucide-react';
 import React, { useRef, useState } from 'react'
 import TextareaAutosize from "react-textarea-autosize";
 
 const Inputarea = ({ isDarkMode, setInputMessage, inputMessage, handleKeyPress, handleSendMessage, status, isLoading, stop, setSelectedFiles,
-   selectedFiles, selectedModel, setSelectedModel}: any) => {
+   selectedFiles, selectedModel, setSelectedModel, fileuploaing}: any) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -77,7 +78,7 @@ const Inputarea = ({ isDarkMode, setInputMessage, inputMessage, handleKeyPress, 
           <div className="flex flex-wrap gap-2">
             {selectedFiles.map((file: File, index: number) => (
               <div key={index} className={`flex items-center px-3 py-2 rounded-lg border ${isDarkMode ? "bg-gray-600 border-gray-500 text-gray-200" : "bg-white border-gray-300 text-gray-700"}`}>
-                {isLoading ? (<div className="loader-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />):(<span>{getFileIcon(file)}</span>)}
+                {isLoading || fileuploaing ? (<Loader />):(<span>{getFileIcon(file)}</span>)}
                 <div className="flex flex-col ml-2">
                   <span className="text-xs font-medium truncate">{file.name}</span>
                   <span className="text-xs text-gray-400">{formatFileSize(file.size)}</span>
@@ -109,9 +110,8 @@ const Inputarea = ({ isDarkMode, setInputMessage, inputMessage, handleKeyPress, 
                 <StopCircle className="w-5 h-5" />
             </button>
         ) : (
-            <button onClick={handleSendMessage} disabled={status === "submitted" || isLoading} className="w-14 h-14 bg-linear-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed rounded-full flex items-center justify-center text-white transition-all shadow-lg hover:shadow-xl hover:scale-105 disabled:hover:scale-100" >
-                {isLoading ? (
-                  <div className="loader-spin w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            <button onClick={handleSendMessage} disabled={status === "submitted" || fileuploaing} className="w-14 h-14 bg-linear-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed rounded-full flex items-center justify-center text-white transition-all shadow-lg hover:shadow-xl hover:scale-105 disabled:hover:scale-100" >
+                {fileuploaing ? (<Loader />
                 ) : (
                   <Send className="w-5 h-5" />
                 )}

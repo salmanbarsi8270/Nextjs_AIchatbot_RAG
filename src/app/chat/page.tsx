@@ -28,9 +28,11 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [showError, setShowError] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState<any>('');
   const { isDarkMode, clearChatSignal } = useApp();
   const [selectedFiles, setSelectedFiles] = useState<any[]>([]);
+  const [fileuploaing, setfileuploaing] = useState(false)
+  const [uploadcontent, setuploadcontent] = useState<any>();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -59,7 +61,7 @@ export default function ChatPage() {
         text: textContent,
         isUser: m.role === 'user',
         timestamp: new Date(m.createdAt || Date.now()),
-        attachments: m.attachments || [],
+        attachments: m.data?.attachments || m.attachments || [] ,
       };
     }));
   }, [messages]);
@@ -90,12 +92,13 @@ export default function ChatPage() {
     scrollToBottom();
   }, [messages]);
 
-  const handleSendMessage = async () => {
-    if (!inputMessage.trim() && selectedFiles.length === 0) return;
+const handleSendMessage = async () => {
+  if (!inputMessage.trim() && selectedFiles.length === 0) return;
 
-    try {
-      // Process files to base64
-      const attachments: any = await Promise.all(
+  try {
+    let finalContent:any = inputMessage;
+
+    const attachments: any = await Promise.all(
         selectedFiles.map(async (file) => {
           const imgId = crypto.randomUUID();
 
@@ -118,45 +121,55 @@ export default function ChatPage() {
         })
       );
 
-      // Check if PDF file needs special processing
-      const hasPDF = selectedFiles.some(file => file.type === 'application/pdf');
-      
-      if (hasPDF) {
-        const formData = new FormData();
-        selectedFiles.forEach(file => {
-          formData.append("pdf", file);
-        });
-        
-        const result = await processpdfFile(formData);
+    // If PDF uploaded → send extracted content instead
+    const hasPDF = selectedFiles.some(file => file.type === 'application/pdf');
 
-        if (result.success) {
-          setSuccessMessage(result.message || "PDF processed successfully!");
-          setShowSuccess(true);
-          setTimeout(() => setShowSuccess(false), 3000);
-        } else {
-          setShowError(true);
-          setTimeout(() => setShowError(false), 3000);
-        }
+    if (hasPDF) {
+      setfileuploaing(true);
+
+      const formData = new FormData();
+      selectedFiles.forEach(file => formData.append("pdf", file));
+
+      const result = await processpdfFile(formData);
+
+      if (result.success) {
+        setfileuploaing(false)
+        setuploadcontent(result.content);         // store extracted text
+        finalContent = result.content;            // <<< USE extracted text
+        setSuccessMessage(result.message);
+        setShowSuccess(true);
+      } else {
+        setShowError(true);
       }
 
-      // Send message using sendMessage with model in body
-      await sendMessage({
-        content: inputMessage || "See attached files",
-        data: {
-          model: selectedModel,
-        }
-      });
-
-      // Clear inputs
-      setInputMessage("");
-      setSelectedFiles([]);
-      
-    } catch (err: any) {
-      console.error('Error sending message:', err);
-      setShowError(true);
-      setTimeout(() => setShowError(false), 3000);
+      setfileuploaing(false);
+      setTimeout(() => setShowSuccess(false), 3000);
     }
-  };
+
+    // --------------------------------------------------
+    // sendMessage() with CORRECT content
+    // --------------------------------------------------
+    await sendMessage({
+      content: uploadcontent || inputMessage || "About the file content..",
+      data: {
+        model: selectedModel,
+        attachments: attachments
+      },
+    });
+
+
+  } catch (err) {
+    console.error("Error sending message:", err);
+    setShowError(true);
+    setTimeout(() => setShowError(false), 3000);
+  }
+  finally{
+    // Clear inputs
+    setInputMessage("");
+    setSelectedFiles([]);
+  }
+};
+
 
   const handleKeyPress = async (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -172,7 +185,7 @@ export default function ChatPage() {
   const isLoading = status === 'submitted' || status === 'streaming';
 
   return (
-    <div className={`flex flex-col h-[calc(100vh-4.5rem)] transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'}`}>
+    <div className={`flex flex-col h-[calc(100vh-4.5rem)] transition-colors duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-linear-to-br from-blue-50 via-purple-50 to-pink-50'}`}>
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 w-full items-center mx-auto">
 
@@ -207,13 +220,13 @@ export default function ChatPage() {
         {uiMessages.map((message) => (
           <div key={message.id} className={`flex items-start space-x-3 animate-fade-in ${message.isUser ? 'flex-row-reverse space-x-reverse' : ''}`}>
             {/* Avatar */}
-            <div className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-xs font-semibold shadow-md transition-transform hover:scale-110 ${message.isUser ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white' : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white'}`}>
+            <div className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-xs font-semibold shadow-md transition-transform hover:scale-110 ${message.isUser ? 'bg-linear-to-r from-blue-500 to-blue-600 text-white' : 'bg-linear-to-r from-purple-500 to-pink-500 text-white'}`}>
               {message.isUser ? '👤' : '🤖'}
             </div>
 
             {/* Message Content */}
             <div className={`max-w-[80%] ${message.isUser ? 'text-right' : ''}`}>
-              <div className={`inline-block px-5 py-3 rounded-2xl shadow-md transition-all hover:shadow-lg ${message.isUser ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-br-none' : isDarkMode ? 'bg-gray-800 border border-gray-700 text-gray-100 rounded-bl-none' : 'bg-white border border-gray-200 text-gray-800 rounded-bl-none'}`}>
+              <div className={`inline-block px-5 py-3 rounded-2xl shadow-md transition-all hover:shadow-lg ${message.isUser ? 'bg-linear-to-r from-blue-500 to-blue-600 text-white rounded-br-none' : isDarkMode ? 'bg-gray-800 border border-gray-700 text-gray-100 rounded-bl-none' : 'bg-white border border-gray-200 text-gray-800 rounded-bl-none'}`}>
                 
                 {/* Display attachments */}
                 {message.attachments?.map((att: any) => (
@@ -225,6 +238,7 @@ export default function ChatPage() {
                   />
                 ))}
 
+                {fileuploaing && message.isUser && (<p className={`leading-6 text-sm text-left whitespace-pre-wrap font-mono ${ isDarkMode ? "text-gray-200" : "text-gray-800"}`}><Loader /> File Uploading...</p>)}
                 <Codeblock text={message.text} isDarkMode={isDarkMode} />
                 {(status === 'streaming' && !message.isUser && message.id === messages[messages.length - 1]?.id) && <Loader />}
               </div>
@@ -238,7 +252,7 @@ export default function ChatPage() {
         {/* Loading Indicator */}
         {isLoading && messages.length > 0 && messages[messages.length - 1]?.role === 'user' && (
           <div className="flex items-start space-x-3 animate-fade-in">
-            <div className="shrink-0 w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center text-xs font-semibold text-white shadow-md">
+            <div className="shrink-0 w-10 h-10 rounded-full bg-linear-to-r from-purple-500 to-pink-500 flex items-center justify-center text-xs font-semibold text-white shadow-md">
               🤖
             </div>
             <div className={`rounded-2xl rounded-bl-none px-5 py-4 shadow-md ${isDarkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'}`}>
@@ -254,14 +268,14 @@ export default function ChatPage() {
         {uiMessages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-[60vh] px-4">
             <div className="relative mb-8">
-              <div className={`w-24 h-24 rounded-2xl flex items-center justify-center shadow-2xl ${isDarkMode ? 'bg-gradient-to-br from-blue-600 to-purple-700 shadow-blue-500/20' : 'bg-gradient-to-br from-blue-500 to-purple-600 shadow-blue-500/30'}`}>
+              <div className={`w-24 h-24 rounded-2xl flex items-center justify-center shadow-2xl ${isDarkMode ? 'bg-linear-to-br from-blue-600 to-purple-700 shadow-blue-500/20' : 'bg-linear-to-br from-blue-500 to-purple-600 shadow-blue-500/30'}`}>
                 <div className="text-3xl">🤖</div>
               </div>
               <div className={`absolute inset-0 rounded-2xl ${isDarkMode ? 'bg-blue-500/20' : 'bg-blue-400/20'} animate-ping`}></div>
             </div>
 
             <div className="text-center mb-12">
-              <h1 className={`text-4xl font-bold mb-4 bg-gradient-to-r ${isDarkMode ? 'from-blue-400 to-purple-400' : 'from-blue-600 to-purple-600'} bg-clip-text text-transparent`}>RAG Search Assistant</h1>
+              <h1 className={`text-4xl font-bold mb-4 bg-linear-to-r ${isDarkMode ? 'from-blue-400 to-purple-400' : 'from-blue-600 to-purple-600'} bg-clip-text text-transparent`}>RAG Search Assistant</h1>
               <p className={`text-lg max-w-md mx-auto ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>Search through your documents using RAG (Retrieval Augmented Generation)</p>
             </div>
 
@@ -291,6 +305,7 @@ export default function ChatPage() {
         isLoading={isLoading} 
         selectedModel={selectedModel}
         setSelectedModel={setSelectedModel}
+        fileuploaing={fileuploaing}
       />
     </div>
   );

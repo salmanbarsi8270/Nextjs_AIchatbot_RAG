@@ -38,6 +38,7 @@ export async function processpdfFile(formData: FormData) {
     return {
       success: true,
       message: "PDF processed & stored successfully.",
+      content : chunks,
     };
   } catch (error) {
     console.error("Error:", error);
