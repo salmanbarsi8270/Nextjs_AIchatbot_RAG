@@ -22,9 +22,7 @@ interface Message {
 
 export default function ChatPage() {
   const [selectedModel, setSelectedModel] = useState("nvidia/nemotron-nano-12b-v2-vl:free");
-  
   const { messages, sendMessage, status, error, stop }:any = useChat();
-
   const [uiMessages, setUiMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
