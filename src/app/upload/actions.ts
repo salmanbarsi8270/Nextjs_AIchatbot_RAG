@@ -14,6 +14,7 @@ export async function processpdfFile(formData: FormData) {
 
     const textOutput = await pdfToText(uint8);
     const text = Array.isArray(textOutput) ? textOutput.join("\n") : textOutput;
+    console.log("text", text)
 
     if (!text || !text.trim()) {
       return { success: false, error: "No extractable text found." };
@@ -27,13 +28,10 @@ export async function processpdfFile(formData: FormData) {
     const embeddingResponse:any = await generateEmbeddingsMany(chunks);
     console.log("EMBEDDINGS RESPONSE...:", embeddingResponse);
 
-    const embedData = embeddingResponse.data;
-    console.log(embedData, "embedData")
-
     await db.insert(documents).values(
       chunks.map((chunk, index) => ({
         content: chunk,
-        embedding: embedData[index].embedding,  
+        embedding: embeddingResponse[index],  
       }))
     );
 

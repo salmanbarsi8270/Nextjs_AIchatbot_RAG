@@ -75,7 +75,7 @@ const Codeblock = ({ text, isDarkMode = true }: any) => {
         // NORMAL TEXT
         // =============================
         return (
-          <p key={index} className={`leading-6 text-sm whitespace-pre-wrap ${ isDarkMode ? "text-gray-200" : "text-gray-800"}`}>
+          <p key={index} className={`leading-6 text-sm text-left whitespace-pre-wrap font-mono ${ isDarkMode ? "text-gray-200" : "text-gray-800"}`}>
             {part}
           </p>
         );

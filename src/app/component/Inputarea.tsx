@@ -1,21 +1,10 @@
-import { Paperclip, Send, StopCircle, X } from 'lucide-react';
+import { Bot, Paperclip, Send, StopCircle, X } from 'lucide-react';
 import React, { useRef, useState } from 'react'
 import TextareaAutosize from "react-textarea-autosize";
 
-type QuickActionType = 'ideas' | 'summarize' | 'explain';
-
-const Inputarea = ({ isDarkMode, setInputMessage, inputMessage, handleKeyPress, handleSendMessage, status, isLoading, stop, setSelectedFiles, selectedFiles}: any) => {
+const Inputarea = ({ isDarkMode, setInputMessage, inputMessage, handleKeyPress, handleSendMessage, status, isLoading, stop, setSelectedFiles,
+   selectedFiles, selectedModel, setSelectedModel}: any) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleQuickAction = (action: QuickActionType) => {
-    const quickMessages: Record<QuickActionType, string> = {
-      ideas: "Can you suggest some creative ideas for my project?",
-      summarize: "Please summarize the key points from our conversation.",
-      explain: "Can you explain how this AI assistant works?"
-    };
-    
-    setInputMessage(quickMessages[action]);
-  };
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -64,6 +53,23 @@ const Inputarea = ({ isDarkMode, setInputMessage, inputMessage, handleKeyPress, 
 
   return (
     <div className={`border-t px-4 py-4 backdrop-blur-sm transition-colors duration-300 ${isDarkMode ? 'bg-gray-800/95 border-gray-700' : 'bg-white/80 border-gray-200'}`}>
+
+      {/* Model Selector */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Bot size={18} className={isDarkMode ? "text-purple-400" : "text-purple-600"} />
+          <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+            AI Model
+          </span>
+        </div>
+        <select value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)} className={`px-3 py-1.5 text-sm rounded-lg border transition-all duration-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 ${ isDarkMode  ? "bg-gray-700 text-gray-200 border-gray-600 hover:bg-gray-600" : "bg-white text-gray-800 border-gray-300 hover:bg-gray-50" }`} >
+          <option value="nvidia/nemotron-nano-12b-v2-vl:free">Nvidia Nemotron 12B (free)</option>
+          <option value="x-ai/grok-4.1-fast:free">x-ai/grok-4.1-fast (free)</option>
+          <option value="kwaipilot/kat-coder-pro:free">kwaipilot/kat-coder-pro (free)</option>
+          <option value="alibaba/tongyi-deepresearch-30b-a3b:free">Alibaba DeepResearch (free)</option>
+          <option value="openai/gpt-oss-20b:free">OpenAI GPT-OSS (free)</option>
+        </select>
+      </div>
       
       {/* Selected Files Preview */}
       {selectedFiles.length > 0 && (
@@ -85,34 +91,18 @@ const Inputarea = ({ isDarkMode, setInputMessage, inputMessage, handleKeyPress, 
         </div>
       )}
 
-      {/* Quick Actions */}
-      <div className="flex flex-wrap gap-2 mb-4">
-        <button onClick={() => handleQuickAction('ideas')} className={`px-4 py-2 text-xs font-medium rounded-full transition-all hover:scale-105 shadow-sm ${ isDarkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-300 border border-gray-600' : 'bg-linear-to-r from-blue-100 to-purple-100 hover:from-blue-200 hover:to-purple-200 text-gray-700 border border-gray-300'}`} >
-          💡 Suggest ideas
-        </button>
-        <button onClick={() => handleQuickAction('summarize')} className={`px-4 py-2 text-xs font-medium rounded-full transition-all hover:scale-105 shadow-sm ${ isDarkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-300 border border-gray-600'  : 'bg-linear-to-r from-purple-100 to-pink-100 hover:from-purple-200 hover:to-pink-200 text-gray-700 border border-gray-300' }`} >
-          📝 Summarize
-        </button>
-        <button onClick={() => handleQuickAction('explain')} className={`px-4 py-2 text-xs font-medium rounded-full transition-all hover:scale-105 shadow-sm ${ isDarkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-300 border border-gray-600' : 'bg-linear-to-r from-pink-100 to-orange-100 hover:from-pink-200 hover:to-orange-200 text-gray-700 border border-gray-300'}`}>
-          🔍 Explain
-        </button>
-      </div>
-
       {/* Hidden File Input */}
       <input type="file" ref={fileInputRef} onChange={handleFileSelect} multiple accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt,.xls,.xlsx" className="hidden" />
 
       {/* Input Area */}
       <div className="flex space-x-3">
-        <div className="flex-1 relative">
-            <TextareaAutosize value={inputMessage} onChange={(e) => setInputMessage(e.target.value)} onKeyDown={handleKeyPress} placeholder="Type your message..." disabled={status === "submitted" || isLoading}
-            minRows={1} maxRows={5}
-                className={` w-full px-5 py-3 pr-12 resize-none rounded-2xl transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDarkMode 
-                    ? 'bg-gray-700 border border-gray-600 text-white placeholder-gray-400'  : 'bg-white border border-gray-300 text-gray-800 placeholder-gray-500'}`}
-            />
-
-            <button type="button" onClick={handlePaperclipClick} className={` absolute right-4 top-1/2 -translate-y-1/2 p-1 rounded-full transition-colors ${isDarkMode  ? "text-gray-400 hover:text-gray-300 hover:bg-gray-600"  : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"}`}>
+        <div className={`shrink-0 w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-200 border hover:shadow-lg ${ isDarkMode ? "bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600 hover:border-gray-500 hover:scale-105" : "bg-white border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-blue-300 hover:scale-105"}`}>
+            <button type="button" onClick={handlePaperclipClick} className={`rounded-full transition-colors ${isDarkMode  ? "text-gray-400 hover:text-gray-300 hover:bg-gray-600"  : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"}`}>
                 <Paperclip className="w-5 h-5" />
             </button>
+        </div>
+        <div className="flex-1 relative">
+            <TextareaAutosize value={inputMessage} onChange={(e) => setInputMessage(e.target.value)} onKeyDown={handleKeyPress} placeholder="Type your message..." disabled={status === "submitted" || isLoading} minRows={1} maxRows={5} className={` w-full px-5 py-3 pr-12 resize-none font-mono rounded-2xl transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDarkMode  ? 'bg-gray-700 border border-gray-600 text-white placeholder-gray-400'  : 'bg-white border border-gray-300 text-gray-800 placeholder-gray-500'}`} />
         </div>
         {status === "streaming" || status === "submitted" ? (
             <button onClick={stop} className="w-14 h-14 bg-linear-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 rounded-full flex items-center justify-center text-white transition-all shadow-lg hover:shadow-xl hover:scale-105 disabled:hover:scale-100" >
