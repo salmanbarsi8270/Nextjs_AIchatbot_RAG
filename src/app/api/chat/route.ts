@@ -79,7 +79,6 @@ Instructions:
         { role: "system", content: systemPrompt },
         { role: "user", content: query },
       ],
-      temperature: 0.7,
     });
 
     return result.toUIMessageStreamResponse();

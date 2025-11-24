@@ -8,22 +8,9 @@ import { useApp } from "@/context/AppContext";
 import { processpdfFile } from "../upload/actions";
 import { Loader } from "@/components/ai-elements/loader";
 
-interface Message {
-  id: string;
-  text: string;
-  isUser: boolean;
-  timestamp: Date;
-  attachments?: Array<{
-    name: string;
-    contentType: string;
-    url: string;
-  }>;
-}
-
 export default function ChatPage() {
   const [selectedModel, setSelectedModel] = useState("nvidia/nemotron-nano-12b-v2-vl:free");
-  const { messages, sendMessage, status, error, stop }:any = useChat();
-  const [uiMessages, setUiMessages] = useState<Message[]>([]);
+  const { messages, sendMessage, status, error, stop }: any = useChat();
   const [inputMessage, setInputMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [showError, setShowError] = useState(false);
@@ -31,46 +18,41 @@ export default function ChatPage() {
   const [successMessage, setSuccessMessage] = useState<any>('');
   const { isDarkMode, clearChatSignal } = useApp();
   const [selectedFiles, setSelectedFiles] = useState<any[]>([]);
-  const [fileuploaing, setfileuploaing] = useState(false)
-  const [uploadcontent, setuploadcontent] = useState<any>();
+  const [fileuploaing, setfileuploaing] = useState(false);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  // Sync useChat messages to UI messages
-  useEffect(() => {
-    setUiMessages(messages.map((m: any) => {
-      let textContent = '';
-      
-      if (m.content) {
-        if (typeof m.content === 'string') {
-          textContent = m.content;
-        } else if (Array.isArray(m.content)) {
-          textContent = m.content
-            .filter((part: any) => part.type === 'text')
-            .map((part: any) => part.text)
-            .join('');
-        }
-      } else if (m.parts) {
-        textContent = m.parts.map((part: any) => part.text).join('');
+  // Helper function to extract text from message
+  const getMessageText = (m: any) => {
+    let textContent = '';
+    
+    if (m.content) {
+      if (typeof m.content === 'string') {
+        textContent = m.content;
+      } else if (Array.isArray(m.content)) {
+        textContent = m.content
+          .filter((part: any) => part.type === 'text')
+          .map((part: any) => part.text)
+          .join('');
       }
-      
-      return {
-        id: m.id,
-        text: textContent,
-        isUser: m.role === 'user',
-        timestamp: new Date(m.createdAt || Date.now()),
-        attachments: m.data?.attachments || m.attachments || [] ,
-      };
-    }));
-  }, [messages]);
+    } else if (m.parts) {
+      textContent = m.parts.map((part: any) => part.text).join('');
+    }
+    
+    return textContent;
+  };
+
+  // Helper function to get attachments
+  const getMessageAttachments = (m: any) => {
+    return m.data?.attachments || m.attachments || [];
+  };
 
   // Clear chat
   useEffect(() => {
     if (clearChatSignal) {
       stop();
-      setUiMessages([]);
       setInputMessage('');
       setSelectedFiles([]);
     }
@@ -92,84 +74,101 @@ export default function ChatPage() {
     scrollToBottom();
   }, [messages]);
 
-const handleSendMessage = async () => {
-  if (!inputMessage.trim() && selectedFiles.length === 0) return;
+  const handleSendMessage = async () => {
+    if (!inputMessage.trim() && selectedFiles.length === 0) return;
 
-  try {
-    let finalContent:any = inputMessage;
+    try {
+      let finalContent: any = inputMessage;
+      let attachments: any = [];
 
-    const attachments: any = await Promise.all(
-        selectedFiles.map(async (file) => {
-          const imgId = crypto.randomUUID();
+      // Process file attachments first
+      if (selectedFiles.length > 0) {
+        attachments = await Promise.all(
+          selectedFiles.map(async (file) => {
+            const imgId = crypto.randomUUID();
 
-          return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-              resolve({
-                imgId,
-                name: file.name,
-                contentType: file.type,
-                url: reader.result as string,
-              });
-            };
-            reader.onerror = (error) => {
-              console.error('Error reading file:', file.name, error);
-              reject(error);
-            };
-            reader.readAsDataURL(file);
-          });
-        })
-      );
+            return new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                resolve({
+                  imgId,
+                  name: file.name,
+                  contentType: file.type,
+                  url: reader.result as string,
+                });
+              };
+              reader.onerror = (error) => {
+                console.error('Error reading file:', file.name, error);
+                reject(error);
+              };
+              reader.readAsDataURL(file);
+            });
+          })
+        );
 
-    // If PDF uploaded → send extracted content instead
-    const hasPDF = selectedFiles.some(file => file.type === 'application/pdf');
+        // If PDF uploaded → extract content BEFORE sending
+        const hasPDF = selectedFiles.some(file => file.type === 'application/pdf');
+        if (hasPDF) {
+          setfileuploaing(true);
 
-    if (hasPDF) {
-      setfileuploaing(true);
+          const formData = new FormData();
+          selectedFiles.forEach(file => formData.append("pdf", file));
 
-      const formData = new FormData();
-      selectedFiles.forEach(file => formData.append("pdf", file));
+          const result = await processpdfFile(formData);
+          setfileuploaing(false);
 
-      const result = await processpdfFile(formData);
-
-      if (result.success) {
-        setfileuploaing(false)
-        setuploadcontent(result.content);         // store extracted text
-        finalContent = result.content;            // <<< USE extracted text
-        setSuccessMessage(result.message);
-        setShowSuccess(true);
-      } else {
-        setShowError(true);
+          if (result.success) {
+            finalContent = result.content; // Use extracted PDF content
+            setSuccessMessage(result.message);
+            setShowSuccess(true);
+            setTimeout(() => setShowSuccess(false), 3000);
+          } else {
+            setShowError(true);
+            setTimeout(() => setShowError(false), 3000);
+            return; // Stop if PDF processing failed
+          }
+        }
       }
 
-      setfileuploaing(false);
-      setTimeout(() => setShowSuccess(false), 3000);
+      const getFileType = (file: File) => {
+          if (file.type === "application/pdf") return "pdf";
+          if (file.type.startsWith("image/")) return "image";
+          if (file.type.startsWith("video/")) return "video";
+          
+          if (
+            file.type === "application/vnd.ms-excel" ||
+            file.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          )
+            return "excel";
+
+          if (
+            file.type === "application/msword" ||
+            file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          )
+            return "word";
+
+          return "unknown";
+        };
+
+      // Send message with the correct finalContent (either PDF content or user input)
+      await sendMessage({
+        content: finalContent || `About this ${getFileType(selectedFiles[0])}..`,
+        data: {
+          model: selectedModel,
+          attachments: attachments
+        },
+      });
+
+      // Clear inputs after successful send
+      setInputMessage("");
+      setSelectedFiles([]);
+
+    } catch (err) {
+      console.error("Error sending message:", err);
+      setShowError(true);
+      setTimeout(() => setShowError(false), 3000);
     }
-
-    // --------------------------------------------------
-    // sendMessage() with CORRECT content
-    // --------------------------------------------------
-    await sendMessage({
-      content: uploadcontent || inputMessage || "About the file content..",
-      data: {
-        model: selectedModel,
-        attachments: attachments
-      },
-    });
-
-
-  } catch (err) {
-    console.error("Error sending message:", err);
-    setShowError(true);
-    setTimeout(() => setShowError(false), 3000);
-  }
-  finally{
-    // Clear inputs
-    setInputMessage("");
-    setSelectedFiles([]);
-  }
-};
-
+  };
 
   const handleKeyPress = async (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -217,37 +216,43 @@ const handleSendMessage = async () => {
           </div>
         )}
 
-        {uiMessages.map((message) => (
-          <div key={message.id} className={`flex items-start space-x-3 animate-fade-in ${message.isUser ? 'flex-row-reverse space-x-reverse' : ''}`}>
+        {messages.map((message: any) => (
+          <div key={message.id} className={`flex items-start space-x-3 animate-fade-in ${message.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''}`}>
             {/* Avatar */}
-            <div className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-xs font-semibold shadow-md transition-transform hover:scale-110 ${message.isUser ? 'bg-linear-to-r from-blue-500 to-blue-600 text-white' : 'bg-linear-to-r from-purple-500 to-pink-500 text-white'}`}>
-              {message.isUser ? '👤' : '🤖'}
+            <div className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-xs font-semibold shadow-md transition-transform hover:scale-110 ${message.role === 'user' ? 'bg-linear-to-r from-blue-500 to-blue-600 text-white' : 'bg-linear-to-r from-purple-500 to-pink-500 text-white'}`}>
+              {message.role === 'user' ? '👤' : '🤖'}
             </div>
 
             {/* Message Content */}
-            <div className={`max-w-[80%] ${message.isUser ? 'text-right' : ''}`}>
-              <div className={`inline-block px-5 py-3 rounded-2xl shadow-md transition-all hover:shadow-lg ${message.isUser ? 'bg-linear-to-r from-blue-500 to-blue-600 text-white rounded-br-none' : isDarkMode ? 'bg-gray-800 border border-gray-700 text-gray-100 rounded-bl-none' : 'bg-white border border-gray-200 text-gray-800 rounded-bl-none'}`}>
+            <div className={`max-w-[80%] ${message.role === 'user' ? 'text-right' : ''}`}>
+              <div className={`inline-block px-5 py-3 rounded-2xl shadow-md transition-all hover:shadow-lg ${message.role === 'user' ? 'bg-linear-to-r from-blue-500 to-blue-600 text-white rounded-br-none' : isDarkMode ? 'bg-gray-800 border border-gray-700 text-gray-100 rounded-bl-none' : 'bg-white border border-gray-200 text-gray-800 rounded-bl-none'}`}>
                 
                 {/* Display attachments */}
-                {message.attachments?.map((att: any) => (
+                {getMessageAttachments(message).map((att: any) => (
                   <AttachmentPreview 
                     key={att.imgId} 
                     attachments={[att]} 
-                    isUser={message.isUser} 
+                    isUser={message.role === 'user'} 
                     isDarkMode={isDarkMode} 
                   />
                 ))}
-
-                {fileuploaing && message.isUser && (<p className={`leading-6 text-sm text-left whitespace-pre-wrap font-mono ${ isDarkMode ? "text-gray-200" : "text-gray-800"}`}><Loader /> File Uploading...</p>)}
-                <Codeblock text={message.text} isDarkMode={isDarkMode} />
-                {(status === 'streaming' && !message.isUser && message.id === messages[messages.length - 1]?.id) && <Loader />}
+                
+                <Codeblock text={getMessageText(message)} isDarkMode={isDarkMode} />
+                
+                {(status === 'streaming' && message.role === 'assistant' && message.id === messages[messages.length - 1]?.id) && <Loader />}
               </div>
-              <div className={`text-xs mt-1.5 ${isDarkMode ? 'text-gray-500' : 'text-gray-500'} ${message.isUser ? 'text-right' : ''}`}>
-                {formatTime(message.timestamp)}
+              <div className={`text-xs mt-1.5 ${isDarkMode ? 'text-gray-500' : 'text-gray-500'} ${message.role === 'user' ? 'text-right' : ''}`}>
+                {formatTime(new Date(message.createdAt || Date.now()))}
               </div>
             </div>
           </div>
         ))}
+
+        {fileuploaing && (
+          <p className={`leading-6 text-sm whitespace-pre-wrap font-mono text-right ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}>
+            <Loader /> File Uploading...
+          </p>
+        )}
         
         {/* Loading Indicator */}
         {isLoading && messages.length > 0 && messages[messages.length - 1]?.role === 'user' && (
@@ -265,7 +270,7 @@ const handleSendMessage = async () => {
           </div>
         )}
 
-        {uiMessages.length === 0 && (
+        {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-[60vh] px-4">
             <div className="relative mb-8">
               <div className={`w-24 h-24 rounded-2xl flex items-center justify-center shadow-2xl ${isDarkMode ? 'bg-linear-to-br from-blue-600 to-purple-700 shadow-blue-500/20' : 'bg-linear-to-br from-blue-500 to-purple-600 shadow-blue-500/30'}`}>
